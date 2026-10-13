@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   Dimensions,
   Image,
-  ScrollView
+  ScrollView,
+  PanResponder
 } from 'react-native';
 import Svg, { Path, G } from 'react-native-svg';
 import { Painting, DifficultyLevel, PuzzlePiece } from '../types';
@@ -16,6 +17,7 @@ import { StorageService } from '../services/storage';
 import { audioHaptics } from '../services/audioHaptics';
 import { useAppTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { getSafeImageUrl } from '../utils/imageUrl';
 
 interface Props {
   painting: Painting;
@@ -79,8 +81,26 @@ export const PuzzleScreen: React.FC<Props> = ({
     boardHeight = Math.round(boardWidth / aspectRatio);
   }
 
-  // 퍼즐 보드 DOM 참조 (브라우저 정확한 뷰포트 절대 좌표 측정용)
+  // 퍼즐 보드 참조 및 절대 위치 측정
   const boardRef = useRef<View>(null);
+  const [boardPosition, setBoardPosition] = useState<{ pageX: number; pageY: number } | null>(null);
+
+  const measureBoard = () => {
+    if (boardRef.current) {
+      if (typeof window !== 'undefined' && (boardRef.current as any).getBoundingClientRect) {
+        const rect = (boardRef.current as any).getBoundingClientRect();
+        setBoardPosition({ pageX: rect.left, pageY: rect.top });
+      } else if ((boardRef.current as any).measureInWindow) {
+        (boardRef.current as any).measureInWindow((x: number, y: number) => {
+          setBoardPosition({ pageX: x, pageY: y });
+        });
+      } else if ((boardRef.current as any).measure) {
+        (boardRef.current as any).measure((x: number, y: number, w: number, h: number, pageX: number, pageY: number) => {
+          setBoardPosition({ pageX, pageY });
+        });
+      }
+    }
+  };
 
   // 퍼즐 기하학 계산
   const puzzleLayout = useMemo(() => {
@@ -132,6 +152,7 @@ export const PuzzleScreen: React.FC<Props> = ({
   const [dragCoords, setDragCoords] = useState<{ x: number; y: number } | null>(null);
   const [dragTilt, setDragTilt] = useState<number>(0);
   const prevDragX = useRef<number>(0);
+  const touchStartPos = useRef<{ x: number; y: number; time: number } | null>(null);
   const [justPlacedId, setJustPlacedId] = useState<number | null>(null);
   const [particles, setParticles] = useState<
     Array<{ id: number; x: number; y: number; vx: number; vy: number; size: number; opacity: number; color: string }>
@@ -229,7 +250,7 @@ export const PuzzleScreen: React.FC<Props> = ({
     };
   }, [draggingPiece, boardWidth, boardHeight, puzzleLayout, streakCount, placedPieceIds]);
 
-  // 브라우저 뷰포트 좌표를 보드 로컬 좌표계로 절대 변환 (서브픽셀 오차 및 자식 요소 오프셋 오류 100% 방지)
+  // 브라우저 뷰포트 좌표를 보드 로컬 좌표계로 절대 변환 (모바일 및 웹 통합)
   const getBoardCoordsFromClient = (clientX: number, clientY: number) => {
     if (typeof window !== 'undefined' && boardRef.current) {
       const node = boardRef.current as any;
@@ -245,6 +266,17 @@ export const PuzzleScreen: React.FC<Props> = ({
             clientY <= rect.bottom + 40
         };
       }
+    }
+    if (boardPosition) {
+      return {
+        x: clientX - boardPosition.pageX,
+        y: clientY - boardPosition.pageY,
+        isInside:
+          clientX >= boardPosition.pageX - 40 &&
+          clientX <= boardPosition.pageX + boardWidth + 40 &&
+          clientY >= boardPosition.pageY - 40 &&
+          clientY <= boardPosition.pageY + boardHeight + 40
+      };
     }
     return null;
   };
@@ -325,48 +357,70 @@ export const PuzzleScreen: React.FC<Props> = ({
   };
 
   // 드롭 또는 터치 시 정밀 위치 판정 (Hit-Testing)
-  const handleDropOrPlace = (piece: PuzzlePiece, clientX: number, clientY: number) => {
-    const coords = getBoardCoordsFromClient(clientX, clientY);
-    if (!coords) return;
+  const handleDropOrPlace = (
+    piece: PuzzlePiece,
+    coordX: number,
+    coordY: number,
+    isLocal: boolean = false
+  ) => {
+    let localX = coordX;
+    let localY = coordY;
+
+    if (!isLocal) {
+      const coords = getBoardCoordsFromClient(coordX, coordY);
+      if (!coords) return;
+      localX = coords.x;
+      localY = coords.y;
+    }
 
     // 타겟 조각의 중심 좌표 계산
     const targetCenterX = piece.targetX + piece.width / 2;
     const targetCenterY = piece.targetY + piece.height / 2;
 
     // 터치/드롭 위치와 타겟 소켓 중심 사이의 거리
-    const distance = Math.hypot(coords.x - targetCenterX, coords.y - targetCenterY);
+    const distance = Math.hypot(localX - targetCenterX, localY - targetCenterY);
 
-    // 너그러운 스냅 판정 허용 오차: 조각 가로/세로의 1.3배 (손가락/마우스로 대략만 가져와도 찰칵 맞물림)
-    const tolerance = Math.max(piece.width, piece.height) * (theme.isSenior ? 1.5 : 1.3);
+    // 너그러운 스냅 판정 허용 오차: 조각 가로/세로의 1.5배 (스마트폰 손가락 터치 시 찰칵 기분 좋게 맞물림)
+    const tolerance = Math.max(piece.width, piece.height) * (theme.isSenior ? 1.7 : 1.5);
 
     if (distance <= tolerance) {
       // 🎯 정확한 위치에 배치 성공!
       const nextStreak = streakCount + 1;
       setStreakCount(nextStreak);
       handleSnapPiece(piece.id, nextStreak);
-    } else if (coords.isInside) {
+      setToastMessage({
+        text: '✨ 완벽한 위치에 기분 좋게 맞물렸습니다!',
+        type: 'success'
+      });
+    } else {
       // ❌ 보드 안이지만 다른 자리에 놓음
       audioHaptics.triggerMismatch();
       setStreakCount(0);
       setToastMessage({
-        text: '❌ 이 위치가 아닙니다. 그림의 색채와 요철 형태를 확인해보세요!',
+        text: '❌ 이 위치가 아닙니다. 그림의 색채와 형태를 확인해보세요!',
         type: 'error'
       });
     }
   };
 
-  // 보드 클릭 이벤트 핸들러
+  // 보드 클릭 및 스마트폰 터치 이벤트 핸들러
   const handleBoardClick = (e: any) => {
     if (!activePiece) {
       setToastMessage({
-        text: '하단 보관함에서 조각을 먼저 드래그하거나 선택해주세요.',
+        text: '🎨 하단 보관함에서 조각을 먼저 선택하거나 드래그해주세요.',
         type: 'info'
       });
       return;
     }
-    const clientX = e.clientX ?? (e.nativeEvent ? e.nativeEvent.clientX : 0);
-    const clientY = e.clientY ?? (e.nativeEvent ? e.nativeEvent.clientY : 0);
-    handleDropOrPlace(activePiece, clientX, clientY);
+
+    // React Native 모바일에서는 locationX, locationY가 보드 상의 정확한 로컬 상대 좌표
+    if (e.nativeEvent && typeof e.nativeEvent.locationX === 'number') {
+      handleDropOrPlace(activePiece, e.nativeEvent.locationX, e.nativeEvent.locationY, true);
+    } else {
+      const clientX = e.clientX ?? (e.nativeEvent ? e.nativeEvent.clientX : 0);
+      const clientY = e.clientY ?? (e.nativeEvent ? e.nativeEvent.clientY : 0);
+      handleDropOrPlace(activePiece, clientX, clientY, false);
+    }
   };
 
   // 힌트: 조각 1개 자동 맞추기
@@ -487,6 +541,7 @@ export const PuzzleScreen: React.FC<Props> = ({
           {/* 퍼즐 캔버스 컨테이너 (정확히 boardWidth x boardHeight, 1픽셀도 잘리지 않음) */}
           <View
             ref={boardRef}
+            onLayout={measureBoard}
             style={{
               width: boardWidth,
               height: boardHeight,
@@ -499,7 +554,7 @@ export const PuzzleScreen: React.FC<Props> = ({
             {/* 고스트 밑그림 오버레이 */}
             {showGhost && (
               <Image
-                source={{ uri: painting.imageUrl }}
+                source={{ uri: getSafeImageUrl(painting.imageUrl) }}
                 style={[styles.ghostImage, { width: boardWidth, height: boardHeight }]}
                 resizeMode="cover"
               />
@@ -644,7 +699,7 @@ export const PuzzleScreen: React.FC<Props> = ({
             const isSelected = activePiece?.id === piece.id;
 
             return (
-              <TouchableOpacity
+              <View
                 key={`tray-${piece.id}`}
                 style={[
                   styles.trayPieceCard,
@@ -653,18 +708,52 @@ export const PuzzleScreen: React.FC<Props> = ({
                     backgroundColor: theme.colors.bgElevated
                   }
                 ]}
-                onPress={() => {
-                  if (isSelected) {
-                    setActivePiece(null);
-                    setToastMessage(null);
-                  } else {
-                    audioHaptics.triggerPickup();
-                    setActivePiece(piece);
-                    setToastMessage({
-                      text: '🎨 조각을 집었습니다! 보드에서 들어갈 자리를 찾아 터치하거나 드래그하세요.',
-                      type: 'info'
-                    });
+                onTouchStart={(e: any) => {
+                  const pageX = e.nativeEvent?.pageX ?? e.clientX ?? 0;
+                  const pageY = e.nativeEvent?.pageY ?? e.clientY ?? 0;
+                  touchStartPos.current = { x: pageX, y: pageY, time: Date.now() };
+                  prevDragX.current = pageX;
+                }}
+                onTouchMove={(e: any) => {
+                  if (!touchStartPos.current) return;
+                  const pageX = e.nativeEvent?.pageX ?? e.clientX ?? 0;
+                  const pageY = e.nativeEvent?.pageY ?? e.clientY ?? 0;
+                  const dist = Math.hypot(pageX - touchStartPos.current.x, pageY - touchStartPos.current.y);
+                  if (dist > 8) {
+                    if (!draggingPiece) {
+                      audioHaptics.triggerPickup();
+                      setActivePiece(piece);
+                      setDraggingPiece(piece);
+                    }
+                    const deltaX = pageX - prevDragX.current;
+                    prevDragX.current = pageX;
+                    setDragTilt(Math.max(-5, Math.min(5, deltaX * 0.4)));
+                    setDragCoords({ x: pageX, y: pageY });
                   }
+                }}
+                onTouchEnd={(e: any) => {
+                  const pageX = e.nativeEvent?.pageX ?? e.clientX ?? 0;
+                  const pageY = e.nativeEvent?.pageY ?? e.clientY ?? 0;
+                  if (draggingPiece) {
+                    handleDropOrPlace(draggingPiece, pageX, pageY, false);
+                    setDraggingPiece(null);
+                    setDragCoords(null);
+                    setDragTilt(0);
+                  } else {
+                    // 터치 이동 없이 탭한 경우: 선택/해제 토글
+                    if (isSelected) {
+                      setActivePiece(null);
+                      setToastMessage(null);
+                    } else {
+                      audioHaptics.triggerPickup();
+                      setActivePiece(piece);
+                      setToastMessage({
+                        text: '🎨 조각을 집었습니다! 보드에서 들어갈 자리를 찾아 터치하세요.',
+                        type: 'info'
+                      });
+                    }
+                  }
+                  touchStartPos.current = null;
                 }}
                 // @ts-ignore 웹 네이티브 포인터 다운 드래그 지원
                 onPointerDown={(e: any) => {
@@ -692,7 +781,7 @@ export const PuzzleScreen: React.FC<Props> = ({
                     <Text style={styles.snapBadgeText}>선택됨</Text>
                   </View>
                 )}
-              </TouchableOpacity>
+              </View>
             );
           })}
         </ScrollView>

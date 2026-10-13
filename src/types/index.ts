@@ -66,8 +66,96 @@ export interface UserSettings {
   sfxVolume: number;     // 0.0 ~ 1.0
 }
 
+export type WallpaperStyle =
+  | 'classic_velvet'
+  | 'modern_slate'
+  | 'gallery_wood'
+  | 'orsay_midnight'
+  | 'louvre_moonlight'
+  | 'uffizi_marble'
+  | 'belvedere_golden'
+  | 'rijks_damask'
+  | 'prado_crimson'
+  | 'met_grand_hall'
+  | 'national_emerald';
+
+export type FrameStyle =
+  | 'ornate_gold'
+  | 'minimal_black'
+  | 'natural_oak'
+  | 'rococo_silver'
+  | 'imperial_marble'
+  | 'renaissance_baroque'
+  | 'art_deco_emerald'
+  | 'victorian_rosegold'
+  | 'gothic_obsidian'
+  | 'florentine_walnut';
+
+
 export interface GalleryCustomization {
   unlockedRooms: string[];
-  wallpaperStyle: 'classic_velvet' | 'modern_slate' | 'gallery_wood';
-  frameStyle: 'ornate_gold' | 'minimal_black' | 'natural_oak';
+  wallpaperStyle: WallpaperStyle;
+  frameStyle: FrameStyle;
 }
+
+// 인앱 구매(IAP) 부티크 상품 타입
+export type ShopCategory = 'paintings' | 'packs' | 'frames' | 'wallpapers';
+
+export interface ShopPaintingItem {
+  id: string;
+  type: 'painting';
+  title: string;
+  artist: string;
+  year?: string;
+  priceKRW: number;
+  priceDisplay: string;
+  imageUrl: string;
+  styleTag: string;
+  description: string;
+}
+
+export interface ShopPackItem {
+  id: string;
+  type: 'pack';
+  title: string;
+  subtitle: string;
+  description: string;
+  priceKRW: number;
+  priceDisplay: string;
+  originalPriceDisplay: string;
+  discountBadge: string;
+  paintingIds: string[];
+  bannerColor: string;
+  tag: string;
+  includedPaintingsPreview?: string[];
+}
+
+export interface ShopFrameItem {
+  id: string;
+  type: 'frame';
+  frameStyle: FrameStyle;
+  title: string;
+  description: string;
+  priceKRW: number;
+  priceDisplay: string;
+  borderColor: string;
+  borderWidth: number;
+  glowColor: string;
+  isFree?: boolean;
+}
+
+export interface ShopWallpaperItem {
+  id: string;
+  type: 'wallpaper';
+  wallpaperStyle: WallpaperStyle;
+  title: string;
+  description: string;
+  priceKRW: number;
+  priceDisplay: string;
+  bgColor: string;
+  accentColor: string;
+  isFree?: boolean;
+}
+
+export type ShopItem = ShopPaintingItem | ShopPackItem | ShopFrameItem | ShopWallpaperItem;
+

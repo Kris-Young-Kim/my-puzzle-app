@@ -11,24 +11,31 @@ import {
   Dimensions
 } from 'react-native';
 import { MASTERPIECES } from '../data/paintings';
-import { Painting } from '../types';
+import { ShopItem, Painting } from '../types';
 import { StorageService } from '../services/storage';
 import { useAppTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { SHOP_PAINTINGS } from '../data/shopCatalog';
+import { PurchaseModal } from './PurchaseModal';
+import { MasterpieceImage } from '../components/MasterpieceImage';
 
 interface Props {
   onSelectPainting: (painting: Painting) => void;
   onGoToVirtualMuseum: () => void;
   onGoToSettings: () => void;
   onOpenAuth: () => void;
+  onGoToTitle?: () => void;
+  onGoToShop?: () => void;
 }
 
 export const HomeScreen: React.FC<Props> = ({
   onSelectPainting,
   onGoToVirtualMuseum,
   onGoToSettings,
-  onOpenAuth
+  onOpenAuth,
+  onGoToTitle,
+  onGoToShop
 }) => {
   const { theme, seniorMode, toggleSeniorMode } = useAppTheme();
   const { user, isSignedIn } = useUser();
@@ -37,24 +44,82 @@ export const HomeScreen: React.FC<Props> = ({
   const cardWidth = (screenWidth - 32 - (numColumns - 1) * 12) / numColumns;
 
   const [selectedTag, setSelectedTag] = useState<string>('전체');
+  const [purchases, setPurchases] = useState(() => StorageService.getPurchases());
+  const [itemToBuy, setItemToBuy] = useState<ShopItem | null>(null);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
 
-  const tags = ['전체', '후기 인상주의', '인상주의', '네덜란드 황금기', '아르누보 / 상징주의', '르네상스'];
+  const tags = [
+    '전체',
+    '인상주의',
+    '후기 인상주의',
+    '르네상스',
+    '바로크',
+    '네덜란드 황금기',
+    '낭만주의',
+    '사실주의',
+    '신고전주의',
+    '아르누보',
+    '라파엘전파',
+    '조선 국보',
+    '우키요에'
+  ];
+
 
   const filteredPaintings = selectedTag === '전체'
     ? MASTERPIECES
     : MASTERPIECES.filter(p => p.styleTag.includes(selectedTag));
 
+  const handleCardPress = (painting: Painting) => {
+    const isUnlocked = purchases.paintings.includes(painting.id);
+    if (isUnlocked) {
+      onSelectPainting(painting);
+    } else {
+      // 990원 낱개 구매 모달 팝업
+      const shopItem = SHOP_PAINTINGS.find(sp => sp.id === painting.id);
+      if (shopItem) {
+        setItemToBuy(shopItem);
+        setIsPurchaseModalOpen(true);
+      } else {
+        onGoToShop?.();
+      }
+    }
+  };
+
+  const handlePurchaseSuccess = (item: ShopItem) => {
+    const updated = StorageService.getPurchases();
+    setPurchases(updated);
+    // 구매 성공 후 해당 명화 즉시 선택하여 플레이로 연결
+    if (item.type === 'painting') {
+      const target = MASTERPIECES.find(m => m.id === item.id);
+      if (target) {
+        onSelectPainting(target);
+      }
+    }
+  };
+
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.bgDark }]}>
       {/* 상단 럭셔리 뮤지엄 헤더 */}
       <View style={[styles.header, { borderColor: theme.colors.borderGold }]}>
-        <View style={styles.titleArea}>
-          <Text style={[styles.brandText, { fontSize: theme.typography.caption, color: theme.colors.goldBright }]}>
-            L’ATELIER DES MAÎTRES
-          </Text>
-          <Text style={[styles.mainTitle, { fontSize: theme.typography.h1, color: theme.colors.textPrimary }]}>
-            힐링 명화 미술관
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+          {onGoToTitle && (
+            <TouchableOpacity
+              style={[styles.iconButton, { minHeight: theme.minTouchSize, minWidth: theme.minTouchSize }]}
+              onPress={onGoToTitle}
+            >
+              <Ionicons name="home-outline" size={20} color={theme.colors.goldBright} />
+            </TouchableOpacity>
+          )}
+
+          <View style={styles.titleArea}>
+            <Text style={[styles.brandText, { fontSize: theme.typography.caption, color: theme.colors.goldBright }]}>
+              L’ATELIER DES MAÎTRES
+            </Text>
+            <Text style={[styles.mainTitle, { fontSize: theme.typography.h1, color: theme.colors.textPrimary }]}>
+              힐링 명화 미술관
+            </Text>
+          </View>
         </View>
 
         <View style={styles.headerButtons}>
@@ -95,6 +160,17 @@ export const HomeScreen: React.FC<Props> = ({
               {seniorMode ? '시니어' : '시니어'}
             </Text>
           </TouchableOpacity>
+
+          {/* 명작 부티크 바로가기 버튼 */}
+          {onGoToShop && (
+            <TouchableOpacity
+              style={[styles.boutiqueBtn, { minHeight: theme.minTouchSize }]}
+              onPress={onGoToShop}
+            >
+              <Ionicons name="bag-handle" size={15} color="#0b0e14" />
+              <Text style={styles.boutiqueBtnText}>부티크</Text>
+            </TouchableOpacity>
+          )}
 
           {/* 가상 미술관 바로가기 버튼 */}
           <TouchableOpacity
@@ -144,6 +220,7 @@ export const HomeScreen: React.FC<Props> = ({
       <ScrollView contentContainerStyle={styles.gridContainer}>
         <View style={styles.gridWrap}>
           {filteredPaintings.map((painting) => {
+            const isUnlocked = purchases.paintings.includes(painting.id);
             const p25 = StorageService.getProgress(painting.id, '25')?.isCompleted;
             const p100 = StorageService.getProgress(painting.id, '100')?.isCompleted;
             const p400 = StorageService.getProgress(painting.id, '400')?.isCompleted;
@@ -151,30 +228,58 @@ export const HomeScreen: React.FC<Props> = ({
             return (
               <TouchableOpacity
                 key={painting.id}
-                style={[styles.paintingCard, { width: cardWidth, backgroundColor: theme.colors.bgCard }]}
-                onPress={() => onSelectPainting(painting)}
+                style={[
+                  styles.paintingCard,
+                  { width: cardWidth, backgroundColor: theme.colors.bgCard },
+                  !isUnlocked && styles.lockedCard
+                ]}
+                onPress={() => handleCardPress(painting)}
               >
                 {/* 썸네일 이미지 */}
                 <View style={styles.thumbWrap}>
-                  <Image source={{ uri: painting.thumbnailUrl || painting.imageUrl }} style={styles.thumbImage} resizeMode="cover" />
-                  <View style={styles.badgeRow}>
-                    <View style={[styles.diffBadge, p25 && styles.diffDone]}>
-                      <Text style={styles.diffBadgeText}>25</Text>
+                  <MasterpieceImage
+                    uri={painting.thumbnailUrl || painting.imageUrl}
+                    style={[styles.thumbImage, !isUnlocked && styles.lockedThumbImage]}
+                    resizeMode="cover"
+                    title={painting.title}
+                    artist={painting.painter.name}
+                    targetWidth={400}
+                  />
+                  {isUnlocked ? (
+                    <View style={styles.badgeRow}>
+                      <View style={[styles.diffBadge, p25 && styles.diffDone]}>
+                        <Text style={styles.diffBadgeText}>25</Text>
+                      </View>
+                      <View style={[styles.diffBadge, p100 && styles.diffDone]}>
+                        <Text style={styles.diffBadgeText}>100</Text>
+                      </View>
+                      <View style={[styles.diffBadge, p400 && styles.diffDone]}>
+                        <Text style={styles.diffBadgeText}>400</Text>
+                      </View>
                     </View>
-                    <View style={[styles.diffBadge, p100 && styles.diffDone]}>
-                      <Text style={styles.diffBadgeText}>100</Text>
+                  ) : (
+                    <View style={styles.lockOverlay}>
+                      <View style={styles.lockBadge}>
+                        <Ionicons name="lock-closed" size={13} color="#f5d76e" />
+                        <Text style={styles.lockBadgeText}>₩990</Text>
+                      </View>
                     </View>
-                    <View style={[styles.diffBadge, p400 && styles.diffDone]}>
-                      <Text style={styles.diffBadgeText}>400</Text>
-                    </View>
-                  </View>
+                  )}
                 </View>
 
                 {/* 메타 정보 */}
                 <View style={styles.cardInfo}>
-                  <Text style={[styles.cardTitle, { fontSize: theme.typography.body, color: theme.colors.textPrimary }]} numberOfLines={1}>
-                    {painting.title}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text
+                      style={[styles.cardTitle, { fontSize: theme.typography.body, color: theme.colors.textPrimary, flex: 1 }]}
+                      numberOfLines={1}
+                    >
+                      {painting.title}
+                    </Text>
+                    {!isUnlocked && (
+                      <Ionicons name="cart-outline" size={15} color="#d4af37" style={{ marginLeft: 4 }} />
+                    )}
+                  </View>
                   <Text style={[styles.cardPainter, { fontSize: theme.typography.caption, color: theme.colors.textMuted }]} numberOfLines={1}>
                     {painting.painter.name}
                   </Text>
@@ -184,6 +289,14 @@ export const HomeScreen: React.FC<Props> = ({
           })}
         </View>
       </ScrollView>
+
+      {/* 결제 확인 모달 */}
+      <PurchaseModal
+        visible={isPurchaseModalOpen}
+        item={itemToBuy}
+        onClose={() => setIsPurchaseModalOpen(false)}
+        onPurchaseSuccess={handlePurchaseSuccess}
+      />
     </View>
   );
 };
@@ -354,5 +467,50 @@ const styles = StyleSheet.create({
   },
   cardPainter: {
     marginTop: 2
+  },
+  boutiqueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    borderRadius: 14,
+    backgroundColor: '#d4af37'
+  },
+  boutiqueBtnText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#0b0e14'
+  },
+  lockedCard: {
+    borderColor: 'rgba(212, 175, 55, 0.3)'
+  },
+  lockedThumbImage: {
+    opacity: 0.65
+  },
+  lockOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(7, 9, 14, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(11, 14, 20, 0.88)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d4af37'
+  },
+  lockBadgeText: {
+    color: '#f5d76e',
+    fontSize: 11,
+    fontWeight: 'bold'
   }
 });

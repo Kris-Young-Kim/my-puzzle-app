@@ -12,22 +12,29 @@ import {
 } from 'react-native';
 import { MASTERPIECES } from '../data/paintings';
 import { StorageService } from '../services/storage';
-import { GalleryCustomization, Painting } from '../types';
+import { GalleryCustomization, Painting, ShopItem, FrameStyle, WallpaperStyle } from '../types';
 import { useAppTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { SHOP_FRAMES, SHOP_WALLPAPERS } from '../data/shopCatalog';
+import { PurchaseModal } from './PurchaseModal';
+import { getSafeImageUrl } from '../utils/imageUrl';
 
 interface Props {
   onBack: () => void;
   onSelectPainting: (painting: Painting) => void;
+  onGoToShop?: () => void;
 }
 
-export const VirtualMuseumScreen: React.FC<Props> = ({ onBack, onSelectPainting }) => {
+export const VirtualMuseumScreen: React.FC<Props> = ({ onBack, onSelectPainting, onGoToShop }) => {
   const { theme } = useAppTheme();
   const screenWidth = Dimensions.get('window').width;
 
   const [customization, setCustomization] = useState<GalleryCustomization>(() => {
     return StorageService.getGalleryCustomization();
   });
+  const [purchases, setPurchases] = useState(() => StorageService.getPurchases());
+  const [itemToBuy, setItemToBuy] = useState<ShopItem | null>(null);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
 
   // 전체 완성된 명화 확인 (최소 1개 난이도라도 완료된 명화들)
   const completedPaintings = MASTERPIECES.filter(p => {
@@ -41,25 +48,70 @@ export const VirtualMuseumScreen: React.FC<Props> = ({ onBack, onSelectPainting 
   const wallpaperBg = {
     classic_velvet: '#2e0f14', // 딥 버건디 벨벳
     modern_slate: '#121620',   // 미드나이트 슬레이트
-    gallery_wood: '#241a12'    // 클래식 원목
-  }[customization.wallpaperStyle];
+    gallery_wood: '#241a12',   // 클래식 원목
+    orsay_midnight: '#0a1322', // 파리 오르세 심야 살롱
+    louvre_moonlight: '#130e24',// 루브르 궁전 달빛 회랑
+    uffizi_marble: '#1c1b18',  // 피렌체 우피치 대리석 홀
+    belvedere_golden: '#241808',// 빈 벨베데레 황금 살롱
+    rijks_damask: '#1a1410',   // 암스테르담 렘브란트 홀
+    prado_crimson: '#2a0a10',  // 마드리드 프라도 궁정 크림슨
+    met_grand_hall: '#14181f', // 뉴욕 메트로폴리탄 그랜드 홀
+    national_emerald: '#061712'// 런던 내셔널 갤러리 로열 에메랄드
+  }[customization.wallpaperStyle] || '#2e0f14';
 
   // 액자 스타일 테두리 매핑
   const frameBorderColor = {
     ornate_gold: '#d4af37',
     minimal_black: '#000000',
-    natural_oak: '#b3824b'
-  }[customization.frameStyle];
+    natural_oak: '#b3824b',
+    rococo_silver: '#e2e8f0',
+    imperial_marble: '#f1ede4',
+    renaissance_baroque: '#ffd700',
+    art_deco_emerald: '#10b981',
+    victorian_rosegold: '#fb7185',
+    gothic_obsidian: '#334155',
+    florentine_walnut: '#854d0e'
+  }[customization.frameStyle] || '#d4af37';
 
-  const handleUpdateWallpaper = (style: GalleryCustomization['wallpaperStyle']) => {
-    const updated = StorageService.saveGalleryCustomization({ wallpaperStyle: style });
-    setCustomization(updated);
+
+  const handleSelectWallpaper = (style: WallpaperStyle) => {
+    if (purchases.wallpapers.includes(style)) {
+      const updated = StorageService.saveGalleryCustomization({ wallpaperStyle: style });
+      setCustomization(updated);
+    } else {
+      const shopItem = SHOP_WALLPAPERS.find(w => w.wallpaperStyle === style);
+      if (shopItem) {
+        setItemToBuy(shopItem);
+        setIsPurchaseModalOpen(true);
+      }
+    }
   };
 
-  const handleUpdateFrame = (style: GalleryCustomization['frameStyle']) => {
-    const updated = StorageService.saveGalleryCustomization({ frameStyle: style });
-    setCustomization(updated);
+  const handleSelectFrame = (style: FrameStyle) => {
+    if (purchases.frames.includes(style)) {
+      const updated = StorageService.saveGalleryCustomization({ frameStyle: style });
+      setCustomization(updated);
+    } else {
+      const shopItem = SHOP_FRAMES.find(f => f.frameStyle === style);
+      if (shopItem) {
+        setItemToBuy(shopItem);
+        setIsPurchaseModalOpen(true);
+      }
+    }
   };
+
+  const handlePurchaseSuccess = (item: ShopItem) => {
+    const updatedPurchases = StorageService.getPurchases();
+    setPurchases(updatedPurchases);
+    if (item.type === 'frame') {
+      const updated = StorageService.saveGalleryCustomization({ frameStyle: item.frameStyle });
+      setCustomization(updated);
+    } else if (item.type === 'wallpaper') {
+      const updated = StorageService.saveGalleryCustomization({ wallpaperStyle: item.wallpaperStyle });
+      setCustomization(updated);
+    }
+  };
+
 
   return (
     <View style={[styles.container, { backgroundColor: wallpaperBg }]}>
@@ -80,6 +132,16 @@ export const VirtualMuseumScreen: React.FC<Props> = ({ onBack, onSelectPainting 
             제1전시실 • 완성된 명화 {completedPaintings.length}/{MASTERPIECES.length}점 전시 중
           </Text>
         </View>
+
+        {onGoToShop && (
+          <TouchableOpacity
+            style={[styles.shopHeaderBtn, { minHeight: theme.minTouchSize }]}
+            onPress={onGoToShop}
+          >
+            <Ionicons name="bag-handle" size={15} color="#0b0e14" />
+            <Text style={styles.shopHeaderBtnText}>부티크</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* 가로 스크롤 미술관 전시실 벽면 */}
@@ -106,7 +168,7 @@ export const VirtualMuseumScreen: React.FC<Props> = ({ onBack, onSelectPainting 
                 onPress={() => onSelectPainting(painting)}
               >
                 {isCompleted ? (
-                  <Image source={{ uri: painting.imageUrl }} style={styles.artworkImage} resizeMode="cover" />
+                  <Image source={{ uri: getSafeImageUrl(painting.imageUrl) }} style={styles.artworkImage} resizeMode="cover" />
                 ) : (
                   <View style={styles.uncompletedPlaceholder}>
                     <Ionicons name="image-outline" size={44} color="rgba(255, 255, 255, 0.2)" />
@@ -136,59 +198,69 @@ export const VirtualMuseumScreen: React.FC<Props> = ({ onBack, onSelectPainting 
       </ScrollView>
 
       {/* 하단 인테리어 커스터마이징 툴바 */}
-      <View style={[styles.customToolbar, { backgroundColor: 'rgba(10, 14, 22, 0.92)' }]}>
+      <View style={[styles.customToolbar, { backgroundColor: 'rgba(10, 14, 22, 0.94)' }]}>
         <View style={styles.toolbarRow}>
           <Text style={[styles.toolLabel, { fontSize: theme.typography.caption, color: theme.colors.goldBright }]}>
             벽지 테마:
           </Text>
-          <View style={styles.btnGroup}>
-            <TouchableOpacity
-              style={[styles.pillBtn, customization.wallpaperStyle === 'classic_velvet' && styles.activePill]}
-              onPress={() => handleUpdateWallpaper('classic_velvet')}
-            >
-              <Text style={styles.pillText}>벨벳 레드</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.pillBtn, customization.wallpaperStyle === 'modern_slate' && styles.activePill]}
-              onPress={() => handleUpdateWallpaper('modern_slate')}
-            >
-              <Text style={styles.pillText}>슬레이트 블랙</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.pillBtn, customization.wallpaperStyle === 'gallery_wood' && styles.activePill]}
-              onPress={() => handleUpdateWallpaper('gallery_wood')}
-            >
-              <Text style={styles.pillText}>클래식 원목</Text>
-            </TouchableOpacity>
-          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.btnGroupScroll}>
+            {SHOP_WALLPAPERS.map((wp) => {
+              const isOwned = purchases.wallpapers.includes(wp.wallpaperStyle);
+              const isActive = customization.wallpaperStyle === wp.wallpaperStyle;
+
+              return (
+                <TouchableOpacity
+                  key={wp.id}
+                  style={[styles.pillBtn, isActive && styles.activePill]}
+                  onPress={() => handleSelectWallpaper(wp.wallpaperStyle)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {!isOwned && <Ionicons name="lock-closed" size={11} color="#f5d76e" />}
+                    <Text style={[styles.pillText, isActive && styles.activePillText]}>
+                      {wp.title}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
 
         <View style={styles.toolbarRow}>
           <Text style={[styles.toolLabel, { fontSize: theme.typography.caption, color: theme.colors.goldBright }]}>
             액자 스타일:
           </Text>
-          <View style={styles.btnGroup}>
-            <TouchableOpacity
-              style={[styles.pillBtn, customization.frameStyle === 'ornate_gold' && styles.activePill]}
-              onPress={() => handleUpdateFrame('ornate_gold')}
-            >
-              <Text style={styles.pillText}>앤틱 골드</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.pillBtn, customization.frameStyle === 'minimal_black' && styles.activePill]}
-              onPress={() => handleUpdateFrame('minimal_black')}
-            >
-              <Text style={styles.pillText}>모던 블랙</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.pillBtn, customization.frameStyle === 'natural_oak' && styles.activePill]}
-              onPress={() => handleUpdateFrame('natural_oak')}
-            >
-              <Text style={styles.pillText}>내추럴 오크</Text>
-            </TouchableOpacity>
-          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.btnGroupScroll}>
+            {SHOP_FRAMES.map((fr) => {
+              const isOwned = purchases.frames.includes(fr.frameStyle);
+              const isActive = customization.frameStyle === fr.frameStyle;
+
+              return (
+                <TouchableOpacity
+                  key={fr.id}
+                  style={[styles.pillBtn, isActive && styles.activePill]}
+                  onPress={() => handleSelectFrame(fr.frameStyle)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {!isOwned && <Ionicons name="lock-closed" size={11} color="#f5d76e" />}
+                    <Text style={[styles.pillText, isActive && styles.activePillText]}>
+                      {fr.title}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
       </View>
+
+      {/* 결제 확인 모달 */}
+      <PurchaseModal
+        visible={isPurchaseModalOpen}
+        item={itemToBuy}
+        onClose={() => setIsPurchaseModalOpen(false)}
+        onPurchaseSuccess={handlePurchaseSuccess}
+      />
     </View>
   );
 };
@@ -338,6 +410,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6
   },
+  btnGroupScroll: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingRight: 16
+  },
   pillBtn: {
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -351,8 +428,26 @@ const styles = StyleSheet.create({
     borderColor: '#f5d76e'
   },
   pillText: {
-    color: '#f8fafc',
+    color: '#cbd5e1',
     fontSize: 11,
     fontWeight: '500'
+  },
+  activePillText: {
+    color: '#f5d76e',
+    fontWeight: 'bold'
+  },
+  shopHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#d4af37',
+    paddingHorizontal: 10,
+    borderRadius: 14
+  },
+  shopHeaderBtnText: {
+    color: '#0b0e14',
+    fontSize: 11,
+    fontWeight: 'bold'
   }
 });
+

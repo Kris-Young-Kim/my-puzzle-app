@@ -43,3 +43,4 @@ backend/.env
 /android
 .neon
 .mcp.json
+scratch/

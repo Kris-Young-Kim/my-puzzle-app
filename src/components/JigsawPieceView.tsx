@@ -13,6 +13,7 @@ import Svg, {
 } from 'react-native-svg';
 import { PuzzlePiece } from '../types';
 import { buildJigsawPieceSVGPath } from '../engine/jigsawGenerator';
+import { getSafeImageUrl } from '../utils/imageUrl';
 
 interface Props {
   piece: PuzzlePiece;
@@ -39,6 +40,7 @@ export const JigsawPieceView: React.FC<Props> = ({
   isJustPlaced = false,
   style
 }) => {
+  const safeUrl = useMemo(() => getSafeImageUrl(imageUrl), [imageUrl]);
   const svgTotalWidth = piece.width + 2 * tabPadding;
   const svgTotalHeight = piece.height + 2 * tabPadding;
 
@@ -117,7 +119,7 @@ export const JigsawPieceView: React.FC<Props> = ({
           {/* 3. 명화 전면 텍스처 (클리핑) */}
           <G transform="translate(0, 0)">
             <SvgImage
-              href={imageUrl}
+              href={safeUrl}
               x={-piece.targetX + tabPadding}
               y={-piece.targetY + tabPadding}
               width={boardWidth}
@@ -190,7 +192,7 @@ export const JigsawPieceView: React.FC<Props> = ({
 
           {/* 명화 텍스처 */}
           <SvgImage
-            href={imageUrl}
+            href={safeUrl}
             x={-piece.targetX + tabPadding}
             y={-piece.targetY + tabPadding}
             width={boardWidth}
@@ -261,7 +263,7 @@ export const JigsawPieceView: React.FC<Props> = ({
 
         {/* 명화 원화 클리핑 */}
         <SvgImage
-          href={imageUrl}
+          href={safeUrl}
           x={-piece.targetX + tabPadding}
           y={-piece.targetY + tabPadding}
           width={boardWidth}
