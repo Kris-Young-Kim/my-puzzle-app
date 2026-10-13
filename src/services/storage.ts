@@ -6,10 +6,17 @@ import { UserProgress, UserSettings, GalleryCustomization, Painting } from '../t
 let mmkvInstance: any = null;
 
 try {
-  const { MMKV } = require('react-native-mmkv');
-  mmkvInstance = new MMKV();
+  const mmkvModule = require('react-native-mmkv');
+  if (typeof mmkvModule.createMMKV === 'function') {
+    mmkvInstance = mmkvModule.createMMKV();
+  } else if (typeof mmkvModule.MMKV === 'function') {
+    mmkvInstance = new mmkvModule.MMKV();
+  }
 } catch (e) {
-  // 웹 또는 네이티브 모듈 로드 실패 시 인메모리 폴백
+  // Expo Go 또는 웹 등 네이티브 JSI 모듈 미지원 환경
+}
+
+if (!mmkvInstance) {
   const memoryStore = new Map<string, string>();
   mmkvInstance = {
     set: (key: string, val: string) => memoryStore.set(key, val),
