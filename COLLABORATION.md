@@ -66,4 +66,51 @@
 
 ---
 
-질문이나 설계 변경이 필요하면 스펙 문서(`docs/superpowers/specs/2026-10-13-masterpiece-jigsaw-puzzle-design.md`)를 기준으로 맞춰주시고, 바꿀 부분이 있으면 이 파일에 메모 남겨주세요. 잘 부탁드립니다! 🚀
+## 🎨 Antigravity (프론트엔드) 진행 현황 (2026-10-13)
+
+1. ✅ **Expo Blank-TypeScript 프로젝트 및 전원 의존성 설치 완료**:
+   - `@shopify/react-native-skia`, `react-native-gesture-handler`, `react-native-reanimated`, `react-native-mmkv`, `expo-haptics`, `expo-av`, `@clerk/clerk-expo`, `react-native-purchases`, `react-native-google-mobile-ads` 설치 및 검증 완료.
+2. ✅ **결정적 PRNG 직소 조각 생성기 구현 ([src/engine/jigsawGenerator.ts](file:///d:/developer/my-puzzle-app/src/engine/jigsawGenerator.ts))**:
+   - `painting_id + difficulty` 시드 기반 Mulberry32 알고리즘으로 탭/블랭크 엣지 및 Skia/SVG 호환 베지에 외곽선 생성.
+3. ✅ **오프라인 우선 MMKV 스토리지 구현 ([src/services/storage.ts](file:///d:/developer/my-puzzle-app/src/services/storage.ts))**:
+   - 조각 스냅 즉시 `progress:{paintingId}:{difficulty}` 무지연 저장 (진행도 유실 방지).
+4. ✅ **시니어 모드 & 테마 컨텍스트 ([src/context/ThemeContext.tsx](file:///d:/developer/my-puzzle-app/src/context/ThemeContext.tsx))**:
+   - 폰트 1.35배 확대, 최소 터치 영역 56dp 보장, 다크 골드 미술관 고대비 컬러 토큰.
+5. ✅ **화면 및 컴포넌트 완성**:
+   - `HomeScreen` (명화 그리드 & 25/100/400 완료 뱃지, 시니어 모드 원터치 토글)
+   - `DifficultyModal` (하위 단계 완료 시 상위 해금)
+   - `PuzzleScreen` (액자 보드, 고스트 밑그림, 햅틱 스냅, 조각 트레이)
+   - `DocentModal` (퍼즐 완성 시 화가/작품 비하인드 스토리 카드)
+   - `VirtualMuseumScreen` (완성작 가로 스크롤 전시실, 벽지/액자 커스터마이징)
+   - `SettingsScreen` (시니어 모드, 햅틱 on/off, Clerk 클라우드 백업, 구매 복원)
+6. ✅ **Clerk 연동 방향**: **옵션 B 확정**
+   - 평소에는 100% 무로그인 익명 플레이로 진입 장벽 제로.
+   - 설정 화면에서 "클라우드 백업"을 누를 때만 Clerk 로그인 → 백엔드 `/sync` 호출로 Neon DB에 저장.
+7. ✅ **정통 직소 퍼즐 베지에 요철 및 소켓 렌더링 완료 ([src/components/JigsawPieceView.tsx](file:///d:/developer/my-puzzle-app/src/components/JigsawPieceView.tsx), [src/engine/jigsawGenerator.ts](file:///d:/developer/my-puzzle-app/src/engine/jigsawGenerator.ts))**:
+   - 단순 사각형 블록이 아닌 정통 직소 퍼즐 곡선(볼록한 탭 Tab, 오목한 홈 Blank)을 3차 베지에 곡선으로 구현.
+   - SVG `ClipPath`를 적용하여 조각 이미지를 요철 형태 그대로 클리핑 & 3D 목재 베벨 테두리 음영 적용.
+   - 퍼즐 보드 위에도 점선 골드 직소 소켓 메쉬를 렌더링하여 빈자리 홈 형태를 시각적으로 확인 가능.
+   - 하단 조각 보관함 트레이에서도 실제 곡선 요철 모양으로 각 조각을 직관적으로 확인 및 탭/스냅 가능.
+8. ✅ **타입체크 (`npx tsc --noEmit`) 0 Errors 검증 완료**.
+
+---
+
+## 🛠️ Backend & Neon DB (Claude Code 바통 터치 완료 — 100% 완료)
+
+클로드코드의 백엔드 계획(`docs/superpowers/plans/2026-10-13-backend-neon-api.md`) 전 Task를 완수했습니다:
+
+- [x] **Task 0: 프로젝트 스캐폴딩** (Vercel Functions + Neon + Vitest + PGlite)
+- [x] **Task 1: 공유 타입 + HTTP 응답 헬퍼** (`src/types.ts`, `src/lib/http.ts`)
+- [x] **Task 2: Zod 요청 검증** (`src/lib/validation.ts`)
+- [x] **Task 3: 오프라인 진행상황 동기화 병합 순수 로직** (`src/lib/sync-merge.ts`, LWW + 완성 단조 증가)
+- [x] **Task 4: DB 추상화 + 다중 문 SQL 실행기** (`src/lib/db.ts`, `src/lib/sql-file.ts`)
+- [x] **Task 5: Neon 스키마 마이그레이션 + PGlite 테스트 하네스** (`src/migrations/001_init.sql`, `src/scripts/migrate.ts`)
+- [x] **Task 6: Repositories** (`src/repositories/paintings.ts`, `src/repositories/packs.ts`, `src/repositories/progress.ts`)
+- [x] **Task 7: 인증** (`src/lib/auth.ts`, Bearer 토큰 추출 + Clerk 검증)
+- [x] **Task 8: 핸들러 + Vercel 어댑터**
+  - 코어 핸들러: `src/handlers/{paintings,packs,progress,sync}.ts`
+  - Vercel 엔드포인트: `api/{health,paintings,packs,progress,sync}.ts`
+- [x] **Task 9: 개발용 시드 데이터** (`src/migrations/seed.sql`, 5대 명화 카탈로그 및 난이도 시드)
+- [x] **Task 10: 전체 통합 테스트 & README** (`README.md`, Vitest 9개 테스트 파일, 43개 테스트 전원 PASS, Typecheck 통과)
+
+모든 엔드포인트(`/api/health`, `/api/paintings`, `/api/packs`, `/api/progress`, `/api/sync`)와 DB 연동 코드가 배포 준비 완료되었습니다! 🚀
