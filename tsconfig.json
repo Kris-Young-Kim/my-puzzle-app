@@ -4,8 +4,7 @@
     "strict": true
   },
   "include": [
-    "**/*",
-    "expo-env.d.ts"
+    "**/*"
   ],
   "exclude": [
     "node_modules",

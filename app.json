@@ -1,11 +1,7 @@
 {
-  "react-native-google-mobile-ads": {
-    "android_app_id": "ca-app-pub-3940256099942544~3347511713",
-    "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
-  },
   "expo": {
-    "name": "_temp_expo",
-    "slug": "_temp_expo",
+    "name": "명화 퍼즐: 아틀리에",
+    "slug": "masterpiece-puzzle",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
