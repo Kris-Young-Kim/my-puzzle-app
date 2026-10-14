@@ -1,8 +1,12 @@
 {
-  "extends": "expo/tsconfig.base",
+  "extends": "expo/tsconfig.base.json",
   "compilerOptions": {
     "strict": true
   },
+  "include": [
+    "**/*",
+    "expo-env.d.ts"
+  ],
   "exclude": [
     "node_modules",
     "backend"

@@ -217,6 +217,7 @@ export const TitleScreen: React.FC<Props> = ({
         ])
       ).start();
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 🧩 게임 요소: 미니 퍼즐 조각 터치 복원 인터랙션
